@@ -1,0 +1,168 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
+
+android {
+    compileSdkVersion 29
+    buildToolsVersion "29.0.3"
+
+    defaultConfig {
+        minSdkVersion 19
+        targetSdkVersion 29
+        versionCode 1
+        versionName findProperty("LIBRARY_VERSION")
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+}
+
+dependencies {
+    implementation 'io.card:android-sdk:5.5.1'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    api 'androidx.appcompat:appcompat:1.1.0'
+    api 'androidx.core:core-ktx:1.2.0'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+}
+
+//---------------------------------- Bintray ----------------------------------//
+apply plugin: 'maven-publish'
+apply plugin: 'com.jfrog.bintray'
+apply plugin: 'org.jetbrains.dokka-android'
+
+buildscript {
+    repositories {
+        jcenter()
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:3.5.3'
+        classpath 'com.github.dcendents:android-maven-gradle-plugin:2.1'
+        classpath "org.jetbrains.dokka:dokka-android-gradle-plugin:0.9.17"
+        classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.4'
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId LIBRARY_GROUP
+
+            artifactId LIBRARY_ARTIFACT
+            artifact ("build/outputs/aar/${project.getName()}-release.aar") {
+                builtBy assemble
+            }
+            afterEvaluate {
+                artifact androidJavadocsJar
+                artifact androidSourcesJar
+            }
+            pom.withXml {
+                Node root = asNode()
+                root.appendNode('name', LIBRARY_ARTIFACT)
+                root.appendNode('description', POM_DESCRIPTION)
+                root.appendNode('url', POM_URL)
+
+                def issues = root.appendNode('issueManagement')
+                issues.appendNode('system', 'github')
+                issues.appendNode('url', POM_SCM_URL)
+
+                def scm = root.appendNode('scm')
+                scm.appendNode('url', POM_SCM_URL)
+                scm.appendNode('connection', POM_SCM_CONNECTION)
+                scm.appendNode('developerConnection', POM_SCM_DEV_CONNECTION)
+
+                def license = root.appendNode('licenses').appendNode('license')
+                license.appendNode('name', POM_LICENCE_NAME)
+                license.appendNode('url', POM_LICENCE_URL)
+                license.appendNode('distribution', POM_LICENCE_DIST)
+
+                def developer = root.appendNode('developers').appendNode('developer')
+                developer.appendNode('id', POM_DEVELOPER_ID)
+                developer.appendNode('name', POM_DEVELOPER_NAME)
+                developer.appendNode('email', POM_DEVELOPER_EMAIL)
+
+                def dependenciesNode = asNode().appendNode('dependencies')
+                configurations.api.allDependencies.each {
+                    if (!it.name.contains('unspecified')) {
+                        def dependencyNode = dependenciesNode.appendNode('dependency')
+                        dependencyNode.appendNode('groupId', it.group)
+                        dependencyNode.appendNode('artifactId', it.name)
+                        dependencyNode.appendNode('version', it.version)
+                    }
+                }
+                configurations.implementation.allDependencies.each {
+                    if (!it.name.contains('unspecified')) {
+                        def dependencyNode = dependenciesNode.appendNode('dependency')
+                        dependencyNode.appendNode('groupId', it.group)
+                        dependencyNode.appendNode('artifactId', it.name)
+                        dependencyNode.appendNode('version', it.version)
+                    }
+                }
+            }
+        }
+    }
+}
+
+bintray {
+    user = BINTRAY_USER
+    key = BINTRAY_API_KEY
+    publications = ['mavenJava']
+
+    dryRun = false
+    publish = true
+    override = true
+    pkg {
+        repo = BINTRAY_REPO
+        name = LIBRARY_ARTIFACT
+        userOrg = BINTRAY_ORG
+        websiteUrl = POM_URL
+        issueTrackerUrl = POM_SCM_URL
+        vcsUrl = POM_SCM_URL
+        licenses = [POM_LICENCE_NAME]
+        labels = ['aar', 'android']
+        version {
+            name = LIBRARY_VERSION
+            vcsTag = LIBRARY_VERSION
+        }
+    }
+}
+
+dokka {
+    outputFormat = 'javadoc'
+    outputDirectory = "$buildDir/javadoc"
+    reportUndocumented = false
+}
+
+task androidJavadocsJar(type: Jar, dependsOn: dokka) {
+    classifier = 'javadoc'
+    from "$buildDir/javadoc"
+}
+
+task androidSourcesJar(type: Jar) {
+    classifier = 'sources'
+    from android.sourceSets.main.java.sourceFiles
+}
+
+task androidJar(type: Jar) {
+    from 'build/intermediates/classes/release'
+}
+
+artifacts {
+    archives androidSourcesJar
+    archives androidJavadocsJar
+    archives androidJar
+}
